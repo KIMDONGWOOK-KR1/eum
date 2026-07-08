@@ -1,0 +1,4 @@
+{
+  "_comment": "이 파일을 keys.local.json으로 복사하고 실제 키를 넣으세요. keys.local.json은 .gitignore로 커밋되지 않습니다.",
+  "YT_API_KEY": ""
+}

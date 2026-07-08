@@ -1,0 +1,789 @@
+<!-- ============================================================
+     NewsOntology 위젯 블록 (원본 기사에 삽입되는 조각)
+     - 모든 스타일은 #newsontology-widget 하위로 스코프하여 원본 페이지와 충돌 방지
+     - D3·데이터는 로컬(vendor/, data/) 참조 → 위젯 자체는 오프라인 동작
+     ============================================================ -->
+<style>
+  #newsontology-widget {
+    --w-bg:#0f0f0f; --w-panel:#181818; --w-surface2:#212121; --w-line:#2f2f2f;
+    --w-text:#f1f1f1; --w-text-dim:#aaa;
+    --fact:#3ddc97; --claim:#ffb454; --accent:#1476e8; --brand-dark:#0d5bc4;
+    max-width: 720px; margin: 40px auto; padding: 0 4px;
+    font-family: -apple-system, "Malgun Gothic", "맑은 고딕", sans-serif;
+    line-height: 1.6; color: var(--w-text);
+    -webkit-text-size-adjust: 100%;
+  }
+  #newsontology-widget *, #newsontology-widget *::before, #newsontology-widget *::after { box-sizing: border-box; }
+  #newsontology-widget .w-lead {
+    font-size: 12px; color: #8a877f; letter-spacing: .3px; text-align: center;
+    margin: 0 0 10px; text-transform: none;
+  }
+  #newsontology-widget .w-card {
+    background: var(--w-bg); border: 1px solid var(--w-line); border-radius: 14px;
+    overflow: hidden; color: var(--w-text); box-shadow: 0 6px 22px rgba(0,0,0,.45);
+  }
+  #newsontology-widget .w-head { padding: 10px 18px 9px; border-bottom: 1px solid var(--w-line);
+    display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  #newsontology-widget .w-head .t { flex: 1 1 300px; }
+  #newsontology-widget .w-title { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; color: var(--w-text); }
+  #newsontology-widget .w-title .dot { color: var(--accent); }
+  #newsontology-widget .w-sub { font-size: 12.5px; color: var(--w-text-dim); margin-top: 3px; }
+  #newsontology-widget .w-tag { font-size: 11px; font-weight: 700; color: var(--fact);
+    background: rgba(61,220,151,.12); border: 1px solid rgba(61,220,151,.34);
+    padding: 5px 10px; border-radius: 20px; white-space: nowrap; align-self: center; }
+  #newsontology-widget .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 18px;
+    border-bottom: 1px solid var(--w-line); font-size: 12px; color: var(--w-text-dim); }
+  #newsontology-widget .legend .it { display: flex; align-items: center; gap: 7px; }
+  #newsontology-widget .lg-line { width: 22px; height: 0; border-top: 2px solid var(--fact); }
+  #newsontology-widget .lg-line.claim { border-top: 2px dashed var(--claim); }
+  #newsontology-widget .lg-dot { width: 12px; height: 12px; border-radius: 50%; background: #16304f; border: 2px solid #1476e8; }
+  #newsontology-widget .lg-dot.sm { width: 8px; height: 8px; background: #202429; border-color: #55627a; }
+  #newsontology-widget .lg-ava { width: 15px; height: 15px; border-radius: 50%; background: #1b2c47; display: inline-block; }
+  #newsontology-widget .lg-ava.person { background: #1b2c47; border: 2px solid #3b82f6; }
+  #newsontology-widget .lg-ava.org { background: #1e2e1f; border: 2px solid #5aa15f; }
+  #newsontology-widget .lg-ava.concept { background: #33212f; border: 2px solid #c47a52; }
+  #newsontology-widget .no-graph-wrap { position: relative; }
+  #newsontology-widget svg { display: block; width: 100%; height: 460px; touch-action: none;
+    background: radial-gradient(130% 100% at 50% 0%, #1c1c1c 0%, #0d0d0d 100%); }
+  @media (max-width: 640px) { #newsontology-widget svg { height: 420px; } }
+  #newsontology-widget .no-zoom { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 6px; }
+  #newsontology-widget .no-zoom button { width: 30px; height: 30px; border-radius: 8px; cursor: pointer;
+    background: rgba(33,33,33,.92); border: 1px solid var(--w-line); color: var(--w-text);
+    font-size: 17px; line-height: 1; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  #newsontology-widget .no-zoom button:hover { border-color: var(--accent); color: #fff; }
+  #newsontology-widget .no-zoom button.reset { font-size: 13px; }
+  #newsontology-widget .no-axis { font-size: 12.5px; color: var(--w-text-dim); text-align: center; padding: 6px 18px 0; }
+  #newsontology-widget .no-axis b { color: var(--accent); font-weight: 700; }
+  #newsontology-widget .no-axis .ax-ico { color: var(--accent); }
+  #newsontology-widget line.no-spine-glow { stroke: var(--accent); stroke-width: 8; stroke-linecap: round;
+    pointer-events: none; animation: noSpinePulse 2.4s ease-in-out infinite; }
+  @keyframes noSpinePulse { 0%, 100% { opacity: .06; } 50% { opacity: .16; } }
+  #newsontology-widget .node-label { paint-order: stroke; stroke: var(--w-bg); stroke-width: 4px; stroke-linejoin: round; }
+  #newsontology-widget .node-type { font-size: 10px; fill: var(--w-text-dim); paint-order: stroke; stroke: var(--w-bg); stroke-width: 3px; }
+  #newsontology-widget .node-avatar { paint-order: stroke; stroke: rgba(0,0,0,.25); stroke-width: 0.4px; }
+  #newsontology-widget .edge-label-g { pointer-events: none; }
+  #newsontology-widget .edge-label-bg { fill: rgba(24,24,24,0.92); stroke: rgba(255,255,255,0.14); stroke-width: 1; }
+  #newsontology-widget .edge-label { font-size: 11.5px; font-weight: 600; fill: #e8e8e8; pointer-events: none; }
+  #newsontology-widget circle.node { cursor: pointer; transition: r .15s; }
+  #newsontology-widget .w-detail { padding: 11px 18px 12px; border-top: 1px solid var(--w-line);
+    min-height: 56px; background: var(--w-panel); }
+  #newsontology-widget .w-detail h4 { margin: 0 0 3px; font-size: 15.5px; font-weight: 800; line-height: 1.45; color: var(--w-text); }
+  #newsontology-widget .w-detail .hint { color: var(--w-text-dim); font-size: 13px; }
+  #newsontology-widget .rel-row { display: flex; gap: 10px; align-items: baseline; margin-bottom: 4px; font-size: 13.5px; }
+  #newsontology-widget .rel-badge { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+  #newsontology-widget .rel-badge.fact { background: rgba(61,220,151,.13); color: var(--fact); border: 1px solid rgba(61,220,151,.38); }
+  #newsontology-widget .rel-badge.claim { background: rgba(255,180,84,.13); color: var(--claim); border: 1px solid rgba(255,180,84,.40); }
+  #newsontology-widget .rel-text { color: var(--w-text); }
+  #newsontology-widget .rel-src { color: var(--w-text-dim); font-size: 11.5px; }
+  #newsontology-widget .anchor-box { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--w-line); }
+  #newsontology-widget .anchor-title { font-size: 12px; color: var(--w-text-dim); margin-bottom: 6px; }
+  #newsontology-widget .anchor-note { color: #8a8a8a; font-weight: 400; }
+  #newsontology-widget .anchor-link { display: block; font-size: 13px; color: var(--accent); text-decoration: none;
+    padding: 5px 9px; margin: 2px 0; border: 1px solid var(--w-line); border-radius: 8px; background: var(--w-surface2);
+    transition: border-color .12s, background .12s; }
+  #newsontology-widget .anchor-link:hover { text-decoration: none; border-color: var(--accent); background: #1c2740; }
+  #newsontology-widget .anchor-ext { color: var(--w-text-dim); font-size: 11px; }
+  /* 관련 영상(YouTube API) 인페이지 플레이어 */
+  #newsontology-widget .yt-wrap { margin-top: 10px; }
+  #newsontology-widget .yt-title { font-size: 12px; color: var(--w-text-dim); margin-bottom: 6px; }
+  #newsontology-widget .yt-note { color: #8a8a8a; font-weight: 400; }
+  #newsontology-widget .yt-loading { font-size: 13px; color: var(--w-text-dim); padding: 10px 2px; }
+  #newsontology-widget .yt-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+  #newsontology-widget .yt-thumb { flex: 0 0 140px; width: 140px; padding: 0; cursor: pointer; text-align: left;
+    background: var(--w-surface2); border: 1px solid var(--w-line); border-radius: 8px; overflow: hidden; transition: border-color .12s, box-shadow .12s; }
+  #newsontology-widget .yt-thumb:hover { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(20,118,232,.30); }
+  #newsontology-widget .yt-thumb-img { position: relative; display: block; }
+  #newsontology-widget .yt-thumb img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #222; }
+  #newsontology-widget .yt-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 30px; height: 30px; border-radius: 50%; background: rgba(200,32,32,.92); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; padding-left: 2px;
+    opacity: 0; transition: opacity .12s; }
+  #newsontology-widget .yt-thumb:hover .yt-play { opacity: 1; }
+  #newsontology-widget .yt-thumb-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    font-size: 11.5px; line-height: 1.35; color: var(--w-text); padding: 6px 8px 2px; }
+  #newsontology-widget .yt-thumb-ch { display: block; font-size: 10.5px; color: var(--w-text-dim); padding: 0 8px 8px; }
+  /* 관련 기사 카드(Custom Search) */
+  #newsontology-widget .art-wrap { margin-top: 10px; }
+  #newsontology-widget .art-card { flex: 0 0 168px; width: 168px; }
+  #newsontology-widget .art-ico { position: absolute; left: 6px; top: 6px; font-size: 12px; background: rgba(255,255,255,.9); border-radius: 4px; padding: 0 3px; }
+  #newsontology-widget .art-noimg { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; background: #202020; font-size: 22px; }
+  #newsontology-widget .art-snip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    font-size: 10.5px; line-height: 1.35; color: var(--w-text-dim); padding: 0 8px 8px; }
+  #newsontology-widget .w-foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 7px 18px; border-top: 1px solid var(--w-line); font-size: 12px; color: var(--w-text-dim); }
+  #newsontology-widget .w-foot .counts b.fact { color: var(--fact); }
+  #newsontology-widget .w-foot .counts b.claim { color: var(--claim); }
+  #newsontology-widget .w-foot .brand { font-weight: 700; color: #8792a8; }
+
+  /* ===== 상단 발견 장치: 플로팅 진입 버튼 + 미니 요약 (뷰포트 고정) ===== */
+  #no-fab { position: fixed; right: 20px; bottom: 20px; z-index: 2147483000;
+    font-family: -apple-system, "Malgun Gothic", "맑은 고딕", sans-serif; transition: opacity .3s; }
+  #no-fab, #no-fab * { box-sizing: border-box; }
+  #no-fab .no-fab-btn { position: relative; display: inline-flex; align-items: center; gap: 8px;
+    background: #1476e8; color: #fff; border: none; border-radius: 999px; cursor: pointer;
+    padding: 8px 17px 8px 8px; font-size: 13.5px; font-weight: 700; line-height: 1;
+    box-shadow: 0 6px 20px rgba(20,118,232,.45); font-family: inherit; }
+  #no-fab .no-fab-btn:hover { background: #0d5bc4; }
+  #no-fab .no-fab-ic { font-size: 16px; }
+  #no-fab .no-fab-ic-img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
+    display: block; background: rgba(255,255,255,.15); }
+  #no-fab .no-fab-ring { position: absolute; inset: -2px; border-radius: 999px; border: 2px solid #1476e8;
+    animation: noFabPulse 2s ease-out infinite; pointer-events: none; }
+  @keyframes noFabPulse { 0% { opacity: .55; transform: scale(1); } 100% { opacity: 0; transform: scale(1.32); } }
+  #no-fab .no-fab-pop { position: absolute; right: 0; bottom: calc(100% + 12px);
+    width: min(304px, calc(100vw - 40px)); background: #181818; color: #f1f1f1;
+    border: 1px solid #2f2f2f; border-radius: 14px; padding: 14px 15px 15px;
+    box-shadow: 0 14px 38px rgba(0,0,0,.55); }
+  #no-fab .no-fab-pop[hidden] { display: none; }
+  #no-fab .no-fab-pop-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  #no-fab .no-fab-badge { font-size: 10.5px; font-weight: 800; color: #3ddc97;
+    background: rgba(61,220,151,.13); border: 1px solid rgba(61,220,151,.38); border-radius: 20px; padding: 2px 8px; }
+  #no-fab .no-fab-pt { font-size: 13.5px; font-weight: 800; flex: 1; }
+  #no-fab .no-fab-x { background: none; border: none; color: #aaa; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+  #no-fab .no-fab-x:hover { color: #f1f1f1; }
+  #no-fab .no-fab-axis { font-size: 12px; color: #aaa; line-height: 1.5; margin-bottom: 10px; }
+  #no-fab .no-fab-axis b { color: #f1f1f1; font-weight: 700; }
+  #no-fab .no-fab-axis .ax { color: #1476e8; }
+  #no-fab .no-fab-stat { display: flex; gap: 14px; font-size: 12.5px; color: #aaa; margin-bottom: 8px; }
+  #no-fab .no-fab-stat b { font-size: 14px; }
+  #no-fab .no-fab-stat b.fc { color: #3ddc97; } #no-fab .no-fab-stat b.cl { color: #ffb454; }
+  #no-fab .no-fab-key { font-size: 12.5px; color: #aaa; }
+  #no-fab .no-fab-key b { color: #f1f1f1; font-weight: 700; }
+  #no-fab .no-fab-go { width: 100%; margin-top: 13px; background: #1476e8; color: #fff; border: none;
+    border-radius: 9px; padding: 10px; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; }
+  #no-fab .no-fab-go:hover { background: #0d5bc4; }
+  @media (max-width: 480px) { #no-fab .no-fab-label { display: none; } #no-fab .no-fab-btn { padding: 6px; } }
+</style>
+
+<section id="newsontology-widget">
+  <div class="w-card">
+    <div class="w-head">
+      <div class="t">
+        <div class="w-title">이슈 관계도 <span class="dot">·</span> NewsOntology</div>
+        <div class="w-sub">이 기사 속 인물·조직·쟁점의 관계를 AI가 구조화했습니다</div>
+      </div>
+      <div class="w-tag">AI 생성 · 근거 검증됨</div>
+    </div>
+
+    <div class="legend">
+      <div class="it"><span class="lg-dot"></span><span class="lg-dot sm"></span> 노드 크기·밝기 = 이슈 내 중요도</div>
+      <div class="it"><span class="lg-line"></span> 확인된 사실</div>
+      <div class="it"><span class="lg-line claim"></span> 주장·해석(미검증)</div>
+      <div class="it"><span class="lg-ava person"></span> 인물</div>
+      <div class="it"><span class="lg-ava org"></span> 조직·집단</div>
+      <div class="it"><span class="lg-ava concept"></span> 쟁점·표현</div>
+    </div>
+
+    <div class="no-axis"><span class="ax-ico">▶</span> 이 사건의 축 <b>수사심의위 → 경찰(9개월 방치) → 뒷북 재배당</b></div>
+
+    <div class="no-graph-wrap">
+      <svg id="no-svg" role="img" aria-label="이슈 관계도"></svg>
+      <div class="no-zoom">
+        <button id="no-zoom-in" type="button" aria-label="확대" title="확대">+</button>
+        <button id="no-zoom-out" type="button" aria-label="축소" title="축소">−</button>
+        <button id="no-zoom-reset" class="reset" type="button" aria-label="원래대로" title="원래대로">⤾</button>
+      </div>
+    </div>
+
+    <div class="w-detail" id="no-detail">
+      <h4>노드를 클릭해 보세요</h4>
+      <div class="hint">각 인물·조직·쟁점의 중요도, 관계와 근거, 그리고 연합뉴스의 관련 콘텐츠 링크가 여기에 표시됩니다.</div>
+    </div>
+
+    <div class="w-foot">
+      <div class="counts">확인된 사실 <b class="fact" id="no-cnt-fact">0</b> · 주장/해석 <b class="claim" id="no-cnt-claim">0</b></div>
+      <div class="brand">Powered by NewsOntology</div>
+    </div>
+  </div>
+
+  <!-- 상단 발견 장치: 첫 화면부터 뜨는 진입 버튼 + 미니 요약 (부팅 시 body로 이동해 뷰포트 고정) -->
+  <div id="no-fab">
+    <div class="no-fab-pop" id="no-fab-pop" hidden role="dialog" aria-label="이슈 관계도 요약">
+      <div class="no-fab-pop-head">
+        <span class="no-fab-badge">AI 분석</span>
+        <span class="no-fab-pt">이 기사 이슈 관계도</span>
+        <button class="no-fab-x" id="no-fab-close" type="button" aria-label="닫기">×</button>
+      </div>
+      <div class="no-fab-axis"><span class="ax">▶</span> 핵심 축<br><b id="no-fab-spine"></b></div>
+      <div class="no-fab-stat">
+        <span>확인된 사실 <b class="fc" id="no-fab-fact">0</b></span>
+        <span>주장·해석 <b class="cl" id="no-fab-claim">0</b></span>
+      </div>
+      <div class="no-fab-key">핵심 인물·쟁점 <b id="no-fab-top"></b></div>
+      <button class="no-fab-go" id="no-fab-go" type="button">전체 관계도 보기 →</button>
+    </div>
+    <button class="no-fab-btn" id="no-fab-btn" type="button" aria-expanded="false" aria-label="이 기사 AI 관계도 요약 열기">
+      <span class="no-fab-ring" aria-hidden="true"></span>
+      <img class="no-fab-ic-img" src="__CHARACTER_DATA_URI__" alt="" aria-hidden="true">
+      <span class="no-fab-label">이 기사 AI 관계도</span>
+    </button>
+  </div>
+</section>
+
+<!-- 오프라인: 로컬 D3 + 인라인 데이터. CDN·fetch 없음 -->
+<script src="vendor/d3.min.js"></script>
+<script src="data/ontology.js"></script>
+<script>
+(function () {
+  "use strict";
+  function boot() {
+    if (typeof d3 === "undefined") { console.error("[NewsOntology] D3 미로드"); return; }
+    const DATA = window.ONTOLOGY_DATA;
+    if (!DATA || !DATA.nodes || !DATA.links) { console.error("[NewsOntology] ONTOLOGY_DATA 없음"); return; }
+    const svgEl = document.getElementById("no-svg");
+    if (!svgEl) { console.error("[NewsOntology] svg 컨테이너 없음"); return; }
+
+    const nodes = DATA.nodes.map(n => Object.assign({}, n));
+    const links = DATA.links;
+
+    // ===== YouTube Data API v3 (관련 영상 인페이지 재생) =====
+    // ⚠️ 클라이언트 노출 키: GCP에서 HTTP 리퍼러(http://localhost:8000/*) + YouTube Data API v3로 반드시 제한.
+    //    네트워크/키 실패 시 기존 유튜브 검색 링크로 폴백(오프라인 발표 안정성 유지).
+    const YT_API_KEY = "__YT_API_KEY__";   // 빌드 시 env(YT_API_KEY) 또는 inject/keys.local.json에서 주입(커밋 금지)
+    const YT_CHANNEL_ID = "UCTHCOPwqNfZ0uiKOvFyhGwg";   // 연합뉴스TV — 이 채널 영상만 추천
+    const ytCache = {};   // nodeId -> [{ id, title, channel, thumb }]
+
+    // ===== Google Custom Search JSON API (관련 기사 카드) =====
+    // 같은 GCP 키 재사용(키 제한을 쓰면 "Custom Search API"도 허용해야 함).
+    // CSE_CX = Programmable Search Engine 검색엔진 ID(yna.co.kr로 제한). 비어있으면 기존 검색 링크로 자동 폴백.
+    const CSE_API_KEY = YT_API_KEY;
+    // CSE_CX를 비워 두면 관련기사는 즉시 정적 검색 링크(fallback)로 표시된다.
+    // → 완전 오프라인·무지연. 프로젝트에 Custom Search API를 켜고 키를 맞추면
+    //   여기에 cx("a0de99519f55242ab")를 넣고 CSE_API_KEY를 그 키로 바꾼 뒤 재생성하면 카드 스트립이 켜진다.
+    const CSE_CX = "";
+    const artCache = {}; // nodeId -> [{ title, link, snippet, thumb }]
+
+    // ===== F3. 중요도 계산 =====
+    const degree = {};
+    nodes.forEach(n => degree[n.id] = 0);
+    links.forEach(l => { degree[l.s]++; degree[l.t]++; });
+    const maxDeg = Math.max(...Object.values(degree));
+    nodes.forEach(n => {
+      const degNorm = degree[n.id] / maxDeg;
+      n.importance = 0.55 * n.weight + 0.45 * degNorm;
+      n.degree = degree[n.id];
+    });
+    const impVals = nodes.map(n => n.importance);
+    const impMin = Math.min(...impVals), impMax = Math.max(...impVals);
+    const rScale = d3.scaleLinear().domain([impMin, impMax]).range([15, 36]);
+    const glowScale = d3.scaleLinear().domain([impMin, impMax]).range([0, 1]);
+    const strokeScale = d3.scaleLinear().domain([impMin, impMax]).range(["#39414f", "#1476e8"]);
+    const fillScale = d3.scaleLinear().domain([impMin, impMax]).range(["#191919", "#16304f"]);
+    const ranked = [...nodes].sort((a, b) => b.importance - a.importance);
+    nodes.forEach(n => n.rank = ranked.indexOf(n) + 1);
+    const nodeR = n => rScale(n.importance);
+
+    const COLOR = { fact: "#3ddc97", claim: "#ffb454", node: "#1476e8" };
+    const typeName = { person: "인물", org: "조직·집단", concept: "쟁점·표현" };
+    const typeTint = { person: "#1b2c47", org: "#1e2e1f", concept: "#33212f" };   // 다크 틴트(이음 테마)
+    const typeRing = { person: "#3b82f6", org: "#5aa15f", concept: "#c47a52" };   // 타입을 눈에 보이게(아바타 링 색)
+
+    const W = svgEl.clientWidth || 700, H = 460;
+    const svg = d3.select("#no-svg").attr("viewBox", `0 0 ${W} ${H}`);
+
+    const defs = svg.append("defs");
+    ["fact", "claim"].forEach(k => {
+      defs.append("marker").attr("id", "no-arrow-" + k).attr("viewBox", "0 -5 10 10")
+        .attr("refX", 20).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto")
+        .append("path").attr("d", "M0,-4L9,0L0,4").attr("fill", COLOR[k]).attr("opacity", .85);
+    });
+    const glow = defs.append("filter").attr("id", "no-glow")
+      .attr("x", "-60%").attr("y", "-60%").attr("width", "220%").attr("height", "220%");
+    glow.append("feGaussianBlur").attr("stdDeviation", "6").attr("result", "blur");
+    const gm = glow.append("feMerge"); gm.append("feMergeNode").attr("in", "blur"); gm.append("feMergeNode").attr("in", "SourceGraphic");
+    nodes.forEach(n => defs.append("clipPath").attr("id", "no-clip-" + n.id).append("circle").attr("r", nodeR(n) - 3));
+
+    const linkData = links.map(l => Object.assign({}, l, { source: l.s, target: l.t }));
+
+    // 확대/축소 대상 레이어 (모든 그래프 요소를 담아 zoom transform 적용)
+    const zoomLayer = svg.append("g").attr("class", "no-zoom-layer");
+
+    // ===== 핵심 갈등축(spine) 강조 = 온로드 펄스 글로우 (맨 아래 레이어) =====
+    // 이 사건의 뼈대: 수사심의위→경찰(신속처리 미이행) · 경찰→금수대(뒷북 재배당)
+    const SPINE = l => (l.s === "review" && l.t === "police") || (l.s === "police" && l.t === "geumsudae");
+    const spineGlowSel = zoomLayer.append("g").attr("class", "no-spine-glow-g")
+      .selectAll("line").data(linkData.filter(SPINE)).join("line").attr("class", "no-spine-glow");
+
+    // ===== 최소 연결선 길이 제약(단방향) =====
+    // 연결된 두 노드가 MIN_LINK보다 가까워지면 그 부족분만큼만 서로 밀어낸다.
+    // (목표 거리를 강제하지 않아 주변 노드는 자유롭게 멀어짐 → 하한선만 유지)
+    // 노드가 클수록 라벨이 놓일 자리가 더 필요하므로 두 노드 반지름을 더해 하한을 키운다.
+    const MIN_LINK = 185;
+    const LINK_SLACK = 20;                                            // 최대 길이 = 최소 + 20
+    const minLenFor = (s, t) => MIN_LINK + nodeR(s) + nodeR(t) - 30;  // 큰 노드일수록 더 벌림
+    function forceMinLink(linksArr, strength) {
+      function force(alpha) {
+        for (const l of linksArr) {
+          const s = l.source, t = l.target;
+          if (!s || !t || typeof s.x !== "number" || typeof t.x !== "number") continue;
+          const minLen = minLenFor(s, t);
+          let dx = (t.x + (t.vx || 0)) - (s.x + (s.vx || 0));
+          let dy = (t.y + (t.vy || 0)) - (s.y + (s.vy || 0));
+          let dist = Math.hypot(dx, dy) || 1;
+          if (dist < minLen) {
+            const f = (minLen - dist) / dist * strength * alpha;
+            dx *= f; dy *= f;
+            t.vx = (t.vx || 0) + dx; t.vy = (t.vy || 0) + dy;
+            s.vx = (s.vx || 0) - dx; s.vy = (s.vy || 0) - dy;
+          }
+        }
+      }
+      force.initialize = () => {};
+      return force;
+    }
+
+    // ===== 라벨 겹침 → 노드 벌리기(자석) =====
+    // 두 엣지의 라벨 박스(선 중점 기준)가 겹치려 하면, 그 엣지들의 '노드'를 서로 밀어
+    // 라벨 놓을 공간을 만든다. 라벨은 선 중점에 고정돼 있으므로 겹침 해소는 이 힘이 담당.
+    function forceLabelSpace(linksArr, strength) {
+      function force(alpha) {
+        for (let i = 0; i < linksArr.length; i++) for (let j = i + 1; j < linksArr.length; j++) {
+          const a = linksArr[i], b = linksArr[j];
+          if (a.bw === undefined || b.bw === undefined) continue;   // 라벨 크기 측정 전이면 skip
+          const as = a.source, at = a.target, bs = b.source, bt = b.target;
+          if (!as || !at || !bs || !bt || typeof as.x !== "number") continue;
+          const ax = (as.x + at.x) / 2, ay = (as.y + at.y) / 2;
+          const bx = (bs.x + bt.x) / 2, by = (bs.y + bt.y) / 2;
+          const dx = bx - ax, dy = by - ay;
+          const ox = (a.bw + b.bw + 6) - Math.abs(dx);
+          const oy = (a.bh + b.bh + 4) - Math.abs(dy);
+          if (ox > 0 && oy > 0) {
+            let mx = 0, my = 0;
+            if (ox < oy) mx = (dx < 0 ? -1 : 1) * ox; else my = (dy < 0 ? -1 : 1) * oy;  // 작은 축으로 분리
+            const f = 0.5 * strength * alpha;
+            const hx = mx * f, hy = my * f;   // a의 중점 -h, b의 중점 +h (각 엔드포인트에 h 적용)
+            as.vx -= hx; as.vy -= hy; at.vx -= hx; at.vy -= hy;
+            bs.vx += hx; bs.vy += hy; bt.vx += hx; bt.vy += hy;
+          }
+        }
+      }
+      force.initialize = () => {};
+      return force;
+    }
+
+    // ===== 초기 배치 설계: 중요도 높은 노드=중심, 낮을수록 가장자리(동심원) =====
+    // 중요도 → 중심에서의 거리. impMax=중심(0), impMin=가장 바깥 링.
+    const radialR = d3.scaleLinear().domain([impMin, impMax])
+      .range([Math.min(W, H) * 0.36, 0]).clamp(true);
+    // 첫 프레임부터 라벨이 겹치지 않도록 각도를 고르게 벌려 '씨앗' 배치.
+    // (이후 force가 관계에 맞게 미세조정하되, 시작이 이미 정돈돼 있어 결과가 안정적)
+    nodes.forEach((n, i) => {
+      const ang = -Math.PI / 2 + (i / nodes.length) * 2 * Math.PI;
+      const rr = radialR(n.importance);
+      n.x = W / 2 + Math.cos(ang) * rr;
+      n.y = H / 2 + Math.sin(ang) * rr;
+    });
+
+    // ===== F1 + 8·11장. force simulation =====
+    const sim = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(linkData).id(d => d.id)
+        .distance(d => minLenFor(d.source, d.target) + LINK_SLACK).strength(.35))
+      .force("charge", d3.forceManyBody().strength(-1150))
+      .force("center", d3.forceCenter(W / 2, H / 2))
+      .force("radial", d3.forceRadial(d => radialR(d.importance), W / 2, H / 2)
+        .strength(d => 0.28 + 0.5 * glowScale(d.importance)))   // 중요할수록 중심으로 강하게
+      .force("x", d3.forceX(W / 2).strength(0.01))
+      .force("y", d3.forceY(H / 2).strength(0.015))
+      .force("collide", d3.forceCollide().radius(d => nodeR(d) + 34).strength(1))
+      .force("minlink", forceMinLink(linkData, 0.7))
+      .force("labelspace", forceLabelSpace(linkData, 0.5));
+
+    // ===== F2. 사실/추측 시각 구분 =====
+    const link = zoomLayer.append("g").selectAll("line").data(linkData).join("line")
+      .attr("stroke", d => COLOR[d.status])
+      .attr("stroke-width", d => d.status === "fact" ? 2 : 1.6)
+      .attr("stroke-dasharray", d => d.status === "claim" ? "5,4" : null)
+      .attr("opacity", .72).attr("marker-end", d => `url(#no-arrow-${d.status})`);
+
+    const node = zoomLayer.append("g").selectAll("g").data(nodes).join("g")
+      .call(d3.drag()
+        .on("start", (e, d) => { if (!e.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
+        .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+    node.append("circle").attr("class", "node").attr("r", d => nodeR(d))
+      .attr("fill", d => fillScale(d.importance)).attr("stroke", d => strokeScale(d.importance))
+      .attr("stroke-width", d => 1.5 + 2 * glowScale(d.importance))
+      .on("click", (e, d) => select(d.id));
+
+    node.filter(d => d.rank <= 2).append("circle").attr("r", d => nodeR(d) + 6)
+      .attr("fill", "none").attr("stroke", COLOR.node).attr("stroke-width", 1)
+      .attr("stroke-dasharray", "2,4").attr("opacity", .5).style("pointer-events", "none");
+
+    // ===== F4. 아바타(+틴트). pointer-events:none 필수 =====
+    node.each(function (d) {
+      const g = d3.select(this);
+      if (d.image) {
+        g.append("image").attr("href", d.image)
+          .attr("x", -(nodeR(d) - 3)).attr("y", -(nodeR(d) - 3))
+          .attr("width", (nodeR(d) - 3) * 2).attr("height", (nodeR(d) - 3) * 2)
+          .attr("preserveAspectRatio", "xMidYMid slice")
+          .attr("clip-path", `url(#no-clip-${d.id})`).style("pointer-events", "none");
+      } else {
+        g.append("circle").attr("r", nodeR(d) - 3).attr("fill", typeTint[d.type])
+          .attr("stroke", typeRing[d.type]).attr("stroke-width", 2.5).style("pointer-events", "none");
+        const txt = d.avatar || d.label.slice(0, 1);
+        const base = nodeR(d);
+        const len = [...txt].length;
+        const fs = len >= 3 ? base * 0.62 : len === 2 ? base * 0.85 : base * 1.05;
+        g.append("text").attr("class", "node-avatar").attr("text-anchor", "middle").attr("dy", fs * 0.35)
+          .style("font-size", fs + "px").style("font-weight", 700).style("fill", "var(--w-text)")
+          .style("pointer-events", "none").text(txt);
+      }
+    });
+
+    node.append("text").attr("class", "node-label").attr("text-anchor", "middle")
+      .attr("dy", d => -(nodeR(d) + 8))
+      .style("font-size", d => (11.5 + 5 * glowScale(d.importance)) + "px")
+      .style("font-weight", d => d.rank <= 2 ? 800 : 600)
+      .style("fill", d => d.rank <= 2 ? "#ffffff" : "var(--w-text)")
+      .style("pointer-events", "none").text(d => d.label);
+
+    node.append("text").attr("class", "node-type").attr("text-anchor", "middle")
+      .attr("dy", d => nodeR(d) + 16).style("pointer-events", "none")
+      .text(d => d.rank <= 2 ? `${typeName[d.type]} · 핵심` : typeName[d.type]);
+
+    // 엣지 라벨은 노드보다 위 레이어에, 각 라벨을 '배경 블록(rect)+텍스트' 묶음으로 그린다
+    // → 블록이 선/다른 라벨을 덮어 글자끼리 겹쳐 보이지 않게 한다(반발 로직이 이 블록 크기와 일치)
+    const edgeLabelG = zoomLayer.append("g").selectAll("g.edge-label-g")
+      .data(linkData).join("g").attr("class", "edge-label-g");
+    edgeLabelG.append("rect").attr("class", "edge-label-bg").attr("rx", 6).attr("ry", 6);
+    const edgeLabel = edgeLabelG.append("text")
+      .attr("class", "edge-label").attr("text-anchor", "middle")
+      .attr("dominant-baseline", "central").text(d => d.label);
+
+    // 텍스트가 점유하는 박스(반폭/반높이) 측정 — 텍스트는 변하지 않으므로 1회
+    function halfBox(el, fbW, fbH) {
+      let w = 0, h = 0, cy = 0;
+      try { const b = el.getBBox(); w = b.width; h = b.height; cy = b.y + b.height / 2; } catch (_) {}
+      if (!w) { w = fbW; h = fbH; }
+      return { hw: w / 2, hh: h / 2, cy };
+    }
+    // 각 라벨의 배경 블록 크기 = 텍스트 박스 + 여백. bw/bh(반폭·반높이)는 반발 로직이 공유.
+    const LBL_PADX = 8, LBL_PADY = 5;
+    edgeLabelG.each(function (d) {
+      const t = d3.select(this).select("text.edge-label").node();
+      let w = 0, h = 0;
+      try { const b = t.getBBox(); w = b.width; h = b.height; } catch (_) {}
+      if (!w) { w = [...d.label].length * 11.5 * 0.92; h = 15; }
+      d.bw = w / 2 + LBL_PADX; d.bh = h / 2 + LBL_PADY;
+      d3.select(this).select("rect.edge-label-bg")
+        .attr("x", -d.bw).attr("y", -d.bh).attr("width", d.bw * 2).attr("height", d.bh * 2);
+    });
+    node.selectAll("text.node-label").each(function (d) { const m = halfBox(this, [...d.label].length * 9, 12); d._nmW = m.hw + 6; d._nmH = m.hh + 4; d._nmCY = m.cy || -(nodeR(d) + 14); });
+    node.selectAll("text.node-type").each(function (d) { const m = halfBox(this, 24, 9); d._tpW = m.hw + 5; d._tpH = m.hh + 3; d._tpCY = m.cy || (nodeR(d) + 18); });
+
+    // 라벨이 노드 원을 침범하면 '엣지에 수직'으로 비켜서게(선 옆 빈 공간으로 탈출)
+    function repelPerp(l, cx, cy, hw, hh, k) {
+      const dx = l.lx - cx, dy = l.ly - cy;
+      const ox = (l.bw + hw) - Math.abs(dx), oy = (l.bh + hh) - Math.abs(dy);
+      if (ox > 0 && oy > 0) {
+        const pen = Math.min(ox, oy);
+        const px = -l._ey, py = l._ex;                 // 엣지 방향의 수직 단위벡터
+        const side = (dx * px + dy * py) >= 0 ? 1 : -1;
+        l.lx += px * side * pen * k; l.ly += py * side * pen * k;
+      }
+    }
+    // 라벨 vs (다른 라벨/노드 글자) AABB 분리 — 세로(선에서 벗어남) 우대
+    function repelBox(l, cx, cy, hw, hh, k) {
+      const dx = l.lx - cx, dy = l.ly - cy;
+      const ox = (l.bw + hw) - Math.abs(dx), oy = (l.bh + hh) - Math.abs(dy);
+      if (ox > 0 && oy > 0) {
+        if (ox * 1.6 < oy) l.lx += (dx < 0 ? -1 : 1) * ox * k;
+        else l.ly += (dy < 0 ? -1 : 1) * oy * k;
+      }
+    }
+
+    // ===== 라벨 배치: 선 중점에 '고정'(이탈 금지) — 겹침 해소는 노드 벌리기가 담당 =====
+    // 라벨은 선 중점으로 강하게 복원되고, 중점에서 LBL_MAX_DRIFT(px) 이상은 절대 못 벗어난다.
+    // (겹침을 라벨을 멀리 보내서가 아니라, forceLabelSpace가 노드를 벌려 해소한다)
+    let focusId = null;                 // 선택 강조에만 사용(라벨 위치엔 영향 없음)
+    const LBL_MAX_DRIFT = 15;           // 라벨이 선 중점에서 벗어날 수 있는 최대치 → 이탈 차단
+    function layoutLabels() {
+      linkData.forEach(l => {
+        let ex = l.target.x - l.source.x, ey = l.target.y - l.source.y;
+        const len = Math.hypot(ex, ey) || 1; l._ex = ex / len; l._ey = ey / len;
+        const ax = (l.source.x + l.target.x) / 2, ay = (l.source.y + l.target.y) / 2 - 2;
+        if (l.lx === undefined) { l.lx = ax; l.ly = ay; }
+        l._ax = ax; l._ay = ay;
+        l.lx += (ax - l.lx) * 0.5; l.ly += (ay - l.ly) * 0.5;   // 강한 복원 → 선 중점에 밀착
+      });
+      for (let it = 0; it < 4; it++) {
+        // 라벨끼리 아주 소폭만 분리(미세 조정 — 큰 겹침은 노드 벌리기가 해소)
+        for (let i = 0; i < linkData.length; i++) for (let j = i + 1; j < linkData.length; j++) {
+          const a = linkData[i], b = linkData[j];
+          const dx = b.lx - a.lx, dy = b.ly - a.ly;
+          const ox = (a.bw + b.bw) - Math.abs(dx), oy = (a.bh + b.bh) - Math.abs(dy);
+          if (ox > 0 && oy > 0) {
+            if (ox < oy) { const s = (dx < 0 ? -1 : 1) * ox * 0.12; a.lx -= s; b.lx += s; }
+            else { const s = (dy < 0 ? -1 : 1) * oy * 0.12; a.ly -= s; b.ly += s; }
+          }
+        }
+        linkData.forEach(l => {
+          // 라벨이 노드 원을 덮으면 선에 수직으로 소폭 회피
+          nodes.forEach(n => repelPerp(l, n.x, n.y, nodeR(n) + 2, nodeR(n) + 2, 0.4));
+          // 중점에서 MAX_DRIFT 이상 벗어나지 못하게 하드 클램프(이탈 원천 차단)
+          const dx = l.lx - l._ax, dy = l.ly - l._ay, d = Math.hypot(dx, dy);
+          if (d > LBL_MAX_DRIFT) { l.lx = l._ax + dx / d * LBL_MAX_DRIFT; l.ly = l._ay + dy / d * LBL_MAX_DRIFT; }
+        });
+      }
+      edgeLabelG.attr("transform", d => `translate(${d.lx},${d.ly})`);
+    }
+
+    // 선택 순간 라벨을 다시 배치 — 시뮬레이션이 멈춰 있어도 라벨만 재정렬(노드는 안 건드림).
+    // rAF로 잠깐 반복 호출해 '자석처럼 벌어지는' 애니메이션을 만든다.
+    let relaxRAF = null, relaxUntil = 0;
+    const nowMs = () => (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    function relaxLabels(ms) {
+      relaxUntil = nowMs() + (ms || 650);
+      if (relaxRAF) return;
+      const step = () => {
+        layoutLabels();
+        if (nowMs() < relaxUntil) relaxRAF = requestAnimationFrame(step);
+        else relaxRAF = null;
+      };
+      relaxRAF = requestAnimationFrame(step);
+    }
+
+    sim.on("tick", () => {
+      nodes.forEach(d => {
+        const pad = nodeR(d) + 20;
+        d.x = Math.max(pad, Math.min(W - pad, d.x));
+        d.y = Math.max(pad + 6, Math.min(H - pad, d.y));
+      });
+      link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+      spineGlowSel.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+      layoutLabels();
+      node.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+    // ===== F5. 상세 패널 + 앵커링 =====
+    let currentSel = null;
+    // 하이라이트만(패널 갱신 없음): 호버 프리뷰와 클릭 선택이 공유. id=null이면 전체 복원.
+    function applyHighlight(id) {
+      const on = l => id == null || l.source.id === id || l.target.id === id;
+      node.selectAll("circle.node")
+        .attr("stroke", d => d.id === id ? "#fff" : strokeScale(d.importance))
+        .attr("stroke-width", d => d.id === id ? 3.4 : (1.5 + 2 * glowScale(d.importance)));
+      link.attr("opacity", l => on(l) ? 1 : .34);
+      edgeLabelG.attr("opacity", l => on(l) ? 1 : .45);
+    }
+    function select(id) {
+      currentSel = id;
+      focusId = id;
+      relaxLabels();          // 선택된 노드의 관계 라벨을 자석처럼 다시 벌려 배치
+      applyHighlight(id);
+      const n = nodes.find(x => x.id === id);
+      const related = linkData.filter(l => l.source.id === id || l.target.id === id);
+
+      const pct = Math.round(n.importance * 100);
+      let html = `<h4>${n.label} <span class="hint" style="font-weight:500">· ${n.desc}</span></h4>
+        <div style="font-size:12px;color:var(--w-text-dim);margin:1px 0 8px;">
+          이슈 내 중요도 <b style="color:var(--accent)">${pct}%</b> · 연결 ${n.degree}개 · 중요도 순위 ${n.rank}위</div>`;
+      related.forEach(l => {
+        const other = l.source.id === id ? l.target : l.source;
+        const dir = l.source.id === id ? "→" : "←";
+        const badge = l.status === "fact"
+          ? `<span class="rel-badge fact">사실</span>`
+          : `<span class="rel-badge claim">주장·해석</span>`;
+        html += `<div class="rel-row">${badge}<span class="rel-text">${dir} <b>${other.label}</b> · ${l.label}
+          <span class="rel-src">— 근거: ${l.src}</span></span></div>`;
+      });
+      html += `<div class="art-wrap" id="no-art"></div>`;   // 관련 기사(Custom Search) 자리
+      html += `<div class="yt-wrap" id="no-yt"></div>`;      // 관련 영상(YouTube API) 자리
+      document.getElementById("no-detail").innerHTML = html;
+      renderArticles(n);
+      renderVideos(n);
+    }
+
+    // ===== 관련 영상: YouTube Data API로 목록 로드 → 인페이지 재생 =====
+    // 영상 앵커 url(youtube 검색)에서 검색어를 추출해 API 질의로 재사용
+    function ytQuery(a) {
+      try { return decodeURIComponent((new URL(a.url)).searchParams.get("search_query") || ""); }
+      catch (_) { return (a.title || "").replace(/^\[영상\]\s*/, ""); }
+    }
+
+    // ===== 관련 기사: Custom Search로 연합뉴스 기사 목록 로드 → 카드 선택 → 기사 새 탭 =====
+    // 기존 yna 검색 링크의 query 파라미터를 그대로 재사용(사이트는 PSE에서 yna.co.kr로 제한)
+    function artQuery(node) {
+      const a = (node.anchors || []).find(x => !x.youtube);
+      if (a) { try { return decodeURIComponent((new URL(a.url)).searchParams.get("query") || ""); } catch (_) {} }
+      return node.label || "";
+    }
+    function renderArticles(node) {
+      const wrap = document.getElementById("no-art");
+      if (!wrap) return;
+      const arts = (node.anchors || []).filter(a => !a.youtube);
+      if (!arts.length) { wrap.innerHTML = ""; return; }
+
+      // 폴백: 기존 검색 링크(무회귀) — CSE_CX 미설정·오프라인·실패 시
+      const fallback = (note) => {
+        let h = `<div class="anchor-box"><div class="anchor-title">이 언론사의 관련 기사 <span class="anchor-note">· 클릭 시 연합뉴스로 이동</span></div>`;
+        arts.forEach(a => { h += `<a class="anchor-link" href="${a.url}" target="_blank" rel="noopener noreferrer">📄 ${a.title} <span class="anchor-ext">↗</span></a>`; });
+        if (note) h += `<div class="yt-note" style="padding-top:6px">${note}</div>`;
+        h += `</div>`;
+        wrap.innerHTML = h;
+      };
+      const drawArtStrip = (items) => {
+        wrap.innerHTML = `<div class="yt-title">관련 기사 <span class="yt-note">· 연합뉴스 · 선택하면 기사 탭에서 열림</span></div>
+          <div class="yt-strip" id="no-art-strip"></div>`;
+        const strip = wrap.querySelector("#no-art-strip");
+        items.forEach(v => {
+          const b = document.createElement("button");
+          b.className = "yt-thumb art-card"; b.type = "button";
+          const img = v.thumb
+            ? `<span class="yt-thumb-img"><img src="${v.thumb}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="art-ico">📄</span></span>`
+            : `<span class="art-noimg">📄</span>`;
+          b.innerHTML = `${img}<span class="yt-thumb-t">${v.title}</span><span class="art-snip">${v.snippet || ""}</span>`;
+          b.addEventListener("click", () => window.open(v.link, "_blank", "noopener,noreferrer"));
+          strip.appendChild(b);
+        });
+      };
+
+      if (!CSE_CX || !navigator.onLine) { fallback(); return; }
+      if (artCache[node.id]) { drawArtStrip(artCache[node.id]); return; }
+
+      wrap.innerHTML = `<div class="yt-title">관련 기사</div><div class="yt-loading">연합뉴스 관련 기사 불러오는 중…</div>`;
+      const url = `https://www.googleapis.com/customsearch/v1?key=${CSE_API_KEY}&cx=${CSE_CX}&num=6`
+        + `&q=${encodeURIComponent(artQuery(node))}`;
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 6000);
+      fetch(url, { signal: ctrl.signal })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(j => {
+          clearTimeout(to);
+          const items = (j.items || []).map(it => ({
+            title: it.title,
+            link: it.link,
+            snippet: it.snippet || "",
+            thumb: (it.pagemap && it.pagemap.cse_thumbnail && it.pagemap.cse_thumbnail[0] && it.pagemap.cse_thumbnail[0].src)
+                || (it.pagemap && it.pagemap.metatags && it.pagemap.metatags[0] && it.pagemap.metatags[0]["og:image"]) || ""
+          }));
+          if (!items.length) { fallback("검색 결과가 없어 기본 링크로 표시합니다."); return; }
+          artCache[node.id] = items;
+          drawArtStrip(items);
+        })
+        .catch(() => { clearTimeout(to); fallback("기사 목록을 불러오지 못해 기본 링크로 표시합니다."); });
+    }
+
+    function renderVideos(node) {
+      const wrap = document.getElementById("no-yt");
+      if (!wrap) return;
+      const vids = (node.anchors || []).filter(a => a.youtube);
+      if (!vids.length) { wrap.innerHTML = ""; return; }
+      const q = ytQuery(vids[0]);
+      // 폴백도 연합뉴스TV 채널 내 검색으로 한정 (자사 채널 트래픽 순환 유지)
+      const fallbackUrl = `https://www.youtube.com/channel/${YT_CHANNEL_ID}/search?query=${encodeURIComponent(q)}`;
+
+      const showFallback = (msg) => {
+        wrap.innerHTML = `<div class="yt-title">관련 영상</div>
+          <a class="anchor-link" href="${fallbackUrl}" target="_blank" rel="noopener noreferrer">▶ 유튜브에서 관련 영상 보기 <span class="anchor-ext">↗</span></a>
+          <div class="yt-note">${msg || "영상 목록을 불러오지 못했습니다."}</div>`;
+      };
+      const drawStrip = (items) => {
+        wrap.innerHTML = `<div class="yt-title">관련 영상 <span class="yt-note">· 연합뉴스TV · 선택하면 유튜브 탭에서 시청</span></div>
+          <div class="yt-strip" id="no-yt-strip"></div>`;
+        const strip = wrap.querySelector("#no-yt-strip");
+        items.forEach(v => {
+          const b = document.createElement("button");
+          b.className = "yt-thumb"; b.type = "button";
+          b.innerHTML = `<span class="yt-thumb-img"><img src="${v.thumb}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="yt-play">▶</span></span>
+            <span class="yt-thumb-t">${v.title}</span><span class="yt-thumb-ch">${v.channel} ↗</span>`;
+          b.addEventListener("click", () => window.open("https://www.youtube.com/watch?v=" + v.id, "_blank", "noopener,noreferrer"));
+          strip.appendChild(b);
+        });
+      };
+
+      if (ytCache[node.id]) { drawStrip(ytCache[node.id]); return; }
+      if (!navigator.onLine) { showFallback("오프라인 상태입니다 — 인터넷 연결 시 목록이 표시됩니다."); return; }
+
+      wrap.innerHTML = `<div class="yt-title">관련 영상</div><div class="yt-loading">연합뉴스TV 관련 영상 불러오는 중…</div>`;
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&safeSearch=none`
+        + `&channelId=${YT_CHANNEL_ID}`   // 연합뉴스TV 채널로 한정
+        + `&q=${encodeURIComponent(q)}&key=${YT_API_KEY}`;
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 6000);
+      fetch(url, { signal: ctrl.signal })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(j => {
+          clearTimeout(to);
+          const items = (j.items || []).filter(x => x.id && x.id.videoId).map(x => ({
+            id: x.id.videoId,
+            title: x.snippet.title,
+            channel: x.snippet.channelTitle,
+            thumb: (x.snippet.thumbnails.medium || x.snippet.thumbnails.default).url
+          }));
+          if (!items.length) { showFallback("검색 결과가 없습니다."); return; }
+          ytCache[node.id] = items;
+          drawStrip(items);
+        })
+        .catch(() => { clearTimeout(to); showFallback("영상 목록을 불러오지 못했습니다(네트워크·API 키·할당량 확인)."); });
+    }
+
+    // ===== 지도식 줌 (우상단 +/−/리셋) =====
+    const zoom = d3.zoom().scaleExtent([0.5, 4])
+      .filter(e => e.type === "wheel" || e.target === svgEl)   // 배경 드래그·휠만 팬/줌, 노드 드래그는 유지
+      .on("zoom", e => zoomLayer.attr("transform", e.transform));
+    const svgSel = d3.select("#no-svg").call(zoom).on("dblclick.zoom", null);
+    const zin = document.getElementById("no-zoom-in");
+    const zout = document.getElementById("no-zoom-out");
+    const zreset = document.getElementById("no-zoom-reset");
+    if (zin) zin.addEventListener("click", () => svgSel.transition().duration(200).call(zoom.scaleBy, 1.35));
+    if (zout) zout.addEventListener("click", () => svgSel.transition().duration(200).call(zoom.scaleBy, 1 / 1.35));
+    if (zreset) zreset.addEventListener("click", () => svgSel.transition().duration(250).call(zoom.transform, d3.zoomIdentity));
+
+    // 노드 호버 시 관련 관계만 밝게(엣지 라벨 점진 표시) → 떼면 현재 선택 상태로 복원
+    node.on("mouseenter", (e, d) => applyHighlight(d.id))
+      .on("mouseleave", () => applyHighlight(currentSel));
+
+    // ===== F2. 푸터 사실/추측 카운트 =====
+    const factCount = linkData.filter(l => l.status === "fact").length;
+    const claimCount = linkData.filter(l => l.status === "claim").length;
+    document.getElementById("no-cnt-fact").textContent = factCount;
+    document.getElementById("no-cnt-claim").textContent = claimCount;
+
+    // ===== 상단 발견 장치: 플로팅 버튼 + 미니 요약 (뷰포트 고정, 원본 무변형) =====
+    const fab = document.getElementById("no-fab");
+    if (fab) {
+      document.body.appendChild(fab);   // body 직속으로 옮겨 position:fixed가 뷰포트 기준이 되게
+      const fabBtn = document.getElementById("no-fab-btn");
+      const fabPop = document.getElementById("no-fab-pop");
+      const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      setText("no-fab-spine", "수사심의위 → 경찰(9개월 방치) → 뒷북 재배당");
+      setText("no-fab-fact", factCount);
+      setText("no-fab-claim", claimCount);
+      setText("no-fab-top", ranked.slice(0, 2).map(n => n.label).join(" · "));
+      const fabOpen = o => { fabPop.hidden = !o; fabBtn.setAttribute("aria-expanded", o ? "true" : "false"); };
+      fabBtn.addEventListener("click", e => { e.stopPropagation(); fabOpen(fabPop.hidden); });
+      const closeB = document.getElementById("no-fab-close");
+      if (closeB) closeB.addEventListener("click", () => fabOpen(false));
+      document.addEventListener("click", e => { if (!fab.contains(e.target)) fabOpen(false); });
+      const goB = document.getElementById("no-fab-go");
+      if (goB) goB.addEventListener("click", () => {
+        fabOpen(false);
+        const sec = document.getElementById("newsontology-widget");
+        if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+        setTimeout(() => select("case"), 480);   // 도착 후 핵심 쟁점 노드 강조
+      });
+      // 위젯이 화면에 들어오면 버튼을 숨겨 방해하지 않음(도달 = 발견 완료)
+      if ("IntersectionObserver" in window) {
+        const sec = document.getElementById("newsontology-widget");
+        if (sec) new IntersectionObserver(es => es.forEach(en => {
+          fab.style.opacity = en.isIntersecting ? "0" : "1";
+          fab.style.pointerEvents = en.isIntersecting ? "none" : "auto";
+        }), { threshold: 0.18 }).observe(sec);
+      }
+    }
+
+    // 로드 즉시 핵심 노드(경찰) 선택 → 첫 3초에 중요도·사실/주장·근거 스토리를 바로 노출
+    select("police");
+
+    console.assert(document.querySelectorAll("#no-svg circle.node").length === 7, "[NewsOntology] 노드 7개 아님");
+    console.assert(document.querySelectorAll("#no-svg line").length === 8, "[NewsOntology] 엣지 8개 아님");
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
+<!-- ============================================================ -->
