@@ -1,3 +1,8 @@
+> ## 📦 이 저장소는 [eum_platform](https://github.com/KIMDONGWOOK-KR1/eum_platform)으로 통합되었습니다
+> 같은 코드가 [`eum_platform/b2b/`](https://github.com/KIMDONGWOOK-KR1/eum_platform/tree/main/b2b)에 있으며, B2C(유튜브 지식그래프)와 함께 최신 문서는 eum_platform에서 확인해 주세요.
+
+---
+
 # NewsOntology — 실서비스 파이프라인 (이음 B2B)
 
 **기사 HTML → 7단계 AI 파이프라인(Gemini + RAG) → 검증된 온톨로지 → 관계도 위젯이 삽입된 HTML**
